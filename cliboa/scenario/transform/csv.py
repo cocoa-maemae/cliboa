@@ -76,6 +76,63 @@ class CsvColumnExtract(FileBaseTransform):
                 Csv.extract_columns_with_numbers(fi, fo, remain_column_numbers)
 
 
+class CsvColumnConcat(FileBaseTransform):
+    """
+    Concat specific columns from csv file.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._columns = None
+        self._dest_column_name = None
+        self._sep = ""
+
+    def columns(self, columns):
+        self._columns = columns
+
+    def dest_column_name(self, dest_column_name):
+        self._dest_column_name = dest_column_name
+
+    def sep(self, sep):
+        self._sep = sep
+
+    def execute(self, *args):
+        valid = EssentialParameters(
+            self.__class__.__name__, [self._src_dir,
+                                      self._src_pattern,
+                                      self._dest_column_name]
+        )
+        valid()
+
+        if len(self._columns) < 2 or type(self._columns) is not list:
+            raise InvalidParameter("'columns' must 2 or more lengths")
+
+        files = super().get_target_files(self._src_dir, self._src_pattern)
+        self.check_file_existence(files)
+
+        for fi, fo in super().io_files(files):
+            df = pandas.read_csv(
+                fi,
+                dtype=str,
+                encoding=self._encoding,
+            )
+
+            dest_str = None
+            for c in self._columns:
+                if dest_str is None:
+                    dest_str = df[c].astype(str)
+                else:
+                    dest_str = dest_str + self._sep + df[c].astype(str)
+                df = df.drop(columns=[c])
+            df[self._dest_column_name] = dest_str
+
+            df.to_csv(
+                fo,
+                encoding=self._encoding,
+                index=False,
+            )
+
+
 class ColumnLengthAdjust(FileBaseTransform):
     """
     Adjust csv (tsv) column to maximum length
@@ -306,6 +363,9 @@ class CsvConcat(FileBaseTransform):
 class CsvHeaderConvert(FileBaseTransform):
     """
     Convert csv headers
+
+    Deprecated.
+    Please Use CsvConvert instead.
     """
 
     def __init__(self):
@@ -316,6 +376,8 @@ class CsvHeaderConvert(FileBaseTransform):
         self._headers = headers
 
     def execute(self, *args):
+        self._logger.warning("Deprecated. Please Use CsvConvert instead.")
+
         if self._dest_pattern:
             self._logger.warning(
                 "'dest_pattern' will be unavailable in the near future."
@@ -411,6 +473,9 @@ class CsvHeaderConvert(FileBaseTransform):
 class CsvFormatChange(FileBaseTransform):
     """
     Change csv format
+
+    Deprecated.
+    Please Use CsvConvert instead.
     """
 
     def __init__(self):
@@ -441,6 +506,8 @@ class CsvFormatChange(FileBaseTransform):
         self._quote = quote
 
     def execute(self, *args):
+        self._logger.warning("Deprecated. Please Use CsvConvert instead.")
+
         # TODO All the statements inside 'if' block will be deleted in the near future.
         if self._dest_pattern:
             self._logger.warning(
