@@ -14,10 +14,10 @@
 import csv
 import os
 
+from cliboa.adapter.sqlite import SqliteAdapter
 from cliboa.scenario.load.sqlite import SqliteImport
 from cliboa.util.helper import Helper
 from cliboa.util.lisboa_log import LisboaLog
-from cliboa.util.sqlite import SqliteAdapter
 
 
 class TestSqliteImport(object):
@@ -41,9 +41,7 @@ class TestSqliteImport(object):
 
             adapter = SqliteAdapter()
             adapter.connect(self.DB_NAME)
-            cur = adapter.fetch(
-                "SELECT * FROM %s" % self.TBL_NAME, row_factory=self._dict_factory
-            )
+            cur = adapter.fetch("SELECT * FROM %s" % self.TBL_NAME, row_factory=self._dict_factory)
 
             count = 0
             for row in cur:
@@ -76,9 +74,7 @@ class TestSqliteImport(object):
 
             adapter = SqliteAdapter()
             adapter.connect(self.DB_NAME)
-            cur = adapter.fetch(
-                "SELECT * FROM %s" % self.TBL_NAME, row_factory=self._dict_factory
-            )
+            cur = adapter.fetch("SELECT * FROM %s" % self.TBL_NAME, row_factory=self._dict_factory)
 
             count = 0
             for row in cur:
@@ -116,9 +112,7 @@ class TestSqliteImport(object):
 
             adapter = SqliteAdapter()
             adapter.connect(self.DB_NAME)
-            cur = adapter.fetch(
-                "SELECT * FROM %s" % self.TBL_NAME, row_factory=self._dict_factory
-            )
+            cur = adapter.fetch("SELECT * FROM %s" % self.TBL_NAME, row_factory=self._dict_factory)
 
             count = 0
             for row in cur:
@@ -160,9 +154,7 @@ class TestSqliteImport(object):
 
             adapter = SqliteAdapter()
             adapter.connect(self.DB_NAME)
-            cur = adapter.fetch(
-                "SELECT * FROM %s" % self.TBL_NAME, row_factory=self._dict_factory
-            )
+            cur = adapter.fetch("SELECT * FROM %s" % self.TBL_NAME, row_factory=self._dict_factory)
 
             count = 0
             for row in cur:
@@ -205,9 +197,7 @@ class TestSqliteImport(object):
 
             adapter = SqliteAdapter()
             adapter.connect(self.DB_NAME)
-            cur = adapter.fetch(
-                "SELECT * FROM %s" % self.TBL_NAME, row_factory=self._dict_factory
-            )
+            cur = adapter.fetch("SELECT * FROM %s" % self.TBL_NAME, row_factory=self._dict_factory)
 
             count = 0
             for row in cur:
@@ -248,9 +238,7 @@ class TestSqliteImport(object):
 
             adapter = SqliteAdapter()
             adapter.connect(self.DB_NAME)
-            cur = adapter.fetch(
-                "SELECT * FROM %s" % self.TBL_NAME, row_factory=self._dict_factory
-            )
+            cur = adapter.fetch("SELECT * FROM %s" % self.TBL_NAME, row_factory=self._dict_factory)
 
             count = 0
             for row in cur:

@@ -14,64 +14,16 @@
 import os
 import re
 
-from cliboa.scenario.base import BaseStep
+from cliboa.adapter.sftp import SftpAdapter
+from cliboa.scenario.sftp import BaseSftp
 from cliboa.scenario.validator import EssentialParameters
 from cliboa.util.cache import ObjectStore
 from cliboa.util.constant import StepStatus
-from cliboa.util.sftp import Sftp
 
 
-class SftpExtract(BaseStep):
+class SftpExtract(BaseSftp):
     def __init__(self):
         super().__init__()
-        self._src_dir = None
-        self._src_pattern = None
-        self._dest_dir = ""
-        self._host = None
-        self._port = 22
-        self._user = None
-        self._password = None
-        self._key = None
-        self._passphrase = None
-        self._endfile_suffix = None
-        self._timeout = 30
-        self._retry_count = 3
-
-    def src_dir(self, src_dir):
-        self._src_dir = src_dir
-
-    def src_pattern(self, src_pattern):
-        self._src_pattern = src_pattern
-
-    def dest_dir(self, dest_dir):
-        self._dest_dir = dest_dir
-
-    def host(self, host):
-        self._host = host
-
-    def port(self, port):
-        self._port = port
-
-    def user(self, user):
-        self._user = user
-
-    def password(self, password):
-        self._password = password
-
-    def key(self, key):
-        self._key = key
-
-    def passphrase(self, passphrase):
-        self._passphrase = passphrase
-
-    def endfile_suffix(self, endfile_suffix):
-        self._endfile_suffix = endfile_suffix
-
-    def timeout(self, timeout):
-        self._timeout = timeout
-
-    def retry_count(self, retry_count):
-        self._retry_count = retry_count
 
 
 class SftpDownload(SftpExtract):
@@ -100,37 +52,19 @@ class SftpDownload(SftpExtract):
 
         os.makedirs(self._dest_dir, exist_ok=True)
 
-        if isinstance(self._key, str):
-            self._logger.warning(
-                (
-                    "DeprecationWarning: "
-                    "In the near future, "
-                    "the `key` will be changed to accept only dictionary types. "
-                    "Please see more information "
-                    "https://github.com/BrainPad/cliboa/blob/master/docs/modules/sftp_download.md"
-                )
-            )
-            key_filepath = self._key
-        else:
-            key_filepath = self._source_path_reader(self._key)
+        obj = SftpAdapter(
+            host=self._host, user=self._user, password=self._password, key=self._key
+        ).list_files(
+            dir=self._src_dir,
+            dest=self._dest_dir,
+            pattern=re.compile(self._src_pattern),
+            endfile_suffix=self._endfile_suffix,
+            ignore_empty_file=self._ignore_empty_file,
+        )
 
-        # fetch src
-        sftp = Sftp(
-            self._host,
-            self._user,
-            self._password,
-            key_filepath,
-            self._passphrase,
-            self._timeout,
-            self._retry_count,
-            self._port,
-        )
-        files = sftp.list_files(
-            self._src_dir, self._dest_dir,
-            re.compile(self._src_pattern),
-            self._endfile_suffix,
-            self._ignore_empty_file,
-        )
+        adaptor = super().get_adaptor()
+        files = adaptor.execute(obj)
+
         if self._quit is True and len(files) == 0:
             self._logger.info("No file was found. After process will not be processed")
             return StepStatus.SUCCESSFUL_TERMINATION
@@ -157,32 +91,20 @@ class SftpDelete(SftpExtract):
         )
         valid()
 
-        if isinstance(self._key, str):
-            self._logger.warning(
-                (
-                    "DeprecationWarning: "
-                    "In the near future, "
-                    "the `key` will be changed to accept only dictionary types. "
-                    "Please see more information "
-                    "https://github.com/BrainPad/cliboa/blob/master/docs/modules/sftp_delete.md"
-                )
-            )
-            key_filepath = self._key
-        else:
-            key_filepath = self._source_path_reader(self._key)
-
-        # remove src
-        sftp = Sftp(
-            self._host,
-            self._user,
-            self._password,
-            key_filepath,
-            self._passphrase,
-            self._timeout,
-            self._retry_count,
-            self._port,
+        obj = SftpAdapter(
+            host=self._host,
+            user=self._user,
+            password=self._password,
+            key=self._key,
+            timeout=self._timeout,
+            port=self._port,
+        ).clear_files(
+            dir=self._src_dir,
+            pattern=re.compile(self._src_pattern),
         )
-        sftp.clear_files(self._src_dir, re.compile(self._src_pattern))
+
+        adaptor = super().get_adaptor()
+        adaptor.execute(obj)
 
 
 class SftpDownloadFileDelete(SftpExtract):
@@ -199,40 +121,84 @@ class SftpDownloadFileDelete(SftpExtract):
         if files is not None and len(files) > 0:
             self._logger.info("Delete files %s" % files)
 
-            if isinstance(super().get_step_argument("key"), str):
-                self._logger.warning(
-                    (
-                        "DeprecationWarning: "
-                        "In the near future, "
-                        "the `key` will be changed to accept only dictionary types. "
-                        "Please see more information "
-                        "https://github.com/BrainPad/cliboa/blob/master/docs/modules/sftp_download_file_delete.md"  # noqa
-                    )
-                )
-                key_filepath = super().get_step_argument("key")
-            else:
-                key_filepath = self._source_path_reader(
-                    super().get_step_argument("key")
-                )
+            self._host = super().get_step_argument("host")
+            self._user = super().get_step_argument("user")
+            self._password = super().get_step_argument("password")
+            self._key = super().get_step_argument("key")
+            self._timeout = super().get_step_argument("timeout")
+            self._retry_count = super().get_step_argument("retry_count")
+            self._port = super().get_step_argument("port")
+            self._endfile_suffix = super().get_step_argument("endfile_suffix")
+            self._src_dir = super().get_step_argument("src_dir")
 
-            sftp = Sftp(
-                super().get_step_argument("host"),
-                super().get_step_argument("user"),
-                super().get_step_argument("password"),
-                key_filepath,
-                super().get_step_argument("timeout"),
-                super().get_step_argument("retry_count"),
-                super().get_step_argument("port"),
-            )
+            adaptor = super().get_adaptor()
 
             endfile_suffix = super().get_step_argument("endfile_suffix")
             for file in files:
-                sftp.remove_specific_file(super().get_step_argument("src_dir"), file)
+                obj = SftpAdapter(
+                    host=self._host,
+                    user=self._user,
+                    password=self._password,
+                    key=self._key,
+                    timeout=self._timeout,
+                    port=self._port,
+                ).remove_specific_file(
+                    dir=self._src_dir,
+                    fname=file,
+                )
+                adaptor.execute(obj)
                 self._logger.info("%s is successfully deleted." % file)
 
                 if endfile_suffix:
-                    sftp.remove_specific_file(
-                        super().get_step_argument("src_dir"), file + endfile_suffix)
+                    obj = SftpAdapter(
+                        host=self._host,
+                        user=self._user,
+                        password=self._password,
+                        key=self._key,
+                        timeout=self._timeout,
+                        port=self._port,
+                    ).remove_specific_file(
+                        dir=self._src_dir,
+                        fname=file + endfile_suffix,
+                    )
                     self._logger.info("%s is successfully deleted." % (file + endfile_suffix))
         else:
             self._logger.info("No files to delete.")
+
+
+class SftpFileExistsCheck(SftpExtract):
+    """
+    File check in sftp server
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._ignore_empty_file = False
+
+    def ignore_empty_file(self, ignore_empty_file):
+        self._ignore_empty_file = ignore_empty_file
+
+    def execute(self, *args):
+        # essential parameters check
+        valid = EssentialParameters(
+            self.__class__.__name__,
+            [self._host, self._user, self._src_dir, self._src_pattern],
+        )
+        valid()
+
+        obj = SftpAdapter(
+            host=self._host, user=self._user, password=self._password, key=self._key
+        ).file_exists_check(
+            dir=self._src_dir,
+            pattern=re.compile(self._src_pattern),
+            ignore_empty_file=self._ignore_empty_file,
+        )
+
+        adaptor = super().get_adaptor()
+        files = adaptor.execute(obj)
+
+        if len(files) == 0:
+            self._logger.info("File not found. After process will not be processed")
+            return StepStatus.SUCCESSFUL_TERMINATION
+
+        self._logger.info("File was found. After process will be processed")

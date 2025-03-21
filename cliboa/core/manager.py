@@ -11,27 +11,24 @@
 # The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
 #
-import json
 import os
 import re
 import subprocess
 from abc import abstractmethod
 
 from cliboa.conf import env
-from cliboa.core.file_parser import YamlScenarioParser
+from cliboa.core.file_parser import JsonScenarioParser, YamlScenarioParser
 from cliboa.core.listener import StepStatusListener
 from cliboa.core.scenario_queue import ScenarioQueue
 from cliboa.core.step_queue import StepQueue
-from cliboa.core.validator import (
-    ProjectDirectoryExistence,
-    ScenarioFileExistence,
-)
+from cliboa.core.validator import ProjectDirectoryExistence, ScenarioFileExistence
 from cliboa.scenario import *  # noqa
 from cliboa.util.cache import StepArgument
 from cliboa.util.class_util import ClassUtil
-from cliboa.util.exception import CliboaException, InvalidParameter, ScenarioFileInvalid
+from cliboa.util.exception import InvalidParameter, ScenarioFileInvalid
 from cliboa.util.helper import Helper
 from cliboa.util.lisboa_log import LisboaLog
+from cliboa.util.parallel_with_config import ParallelWithConfig
 
 __all__ = ["YamlScenarioManager", "JsonScenarioManager"]
 
@@ -53,27 +50,20 @@ class ScenarioManager(object):
         )
         if cmd_args.format == "yaml":
             self._pj_scenario_file = (
-                os.path.join(
-                    env.PROJECT_DIR, cmd_args.project_name, env.SCENARIO_FILE_NAME
-                )
+                os.path.join(env.PROJECT_DIR, cmd_args.project_name, env.SCENARIO_FILE_NAME)
                 + ".yml"
             )
-            self._cmn_scenario_file = (
-                os.path.join(env.COMMON_DIR, env.SCENARIO_FILE_NAME) + ".yml"
-            )
+            self._cmn_scenario_file = os.path.join(env.COMMON_DIR, env.SCENARIO_FILE_NAME) + ".yml"
         else:
             self._pj_scenario_file = (
-                os.path.join(
-                    env.PROJECT_DIR, cmd_args.project_name, env.SCENARIO_FILE_NAME
-                )
+                os.path.join(env.PROJECT_DIR, cmd_args.project_name, env.SCENARIO_FILE_NAME)
                 + "."
                 + cmd_args.format
             )
             self._cmn_scenario_file = (
-                os.path.join(env.COMMON_DIR, env.SCENARIO_FILE_NAME)
-                + "."
-                + cmd_args.format
+                os.path.join(env.COMMON_DIR, env.SCENARIO_FILE_NAME) + "." + cmd_args.format
             )
+        self._replace_vars_pattern = re.compile(r"{{(.*?)}}")
 
     def create_scenario_queue(self):
         # validation
@@ -118,13 +108,9 @@ class ScenarioManager(object):
         """
         for block in scenario_list:
             if "multi_process_count" in block.keys():
-                Helper.set_property(
-                    queue, "multi_proc_cnt", block.get("multi_process_count")
-                )
+                Helper.set_property(queue, "multi_proc_cnt", block.get("multi_process_count"))
             elif "force_continue" in block.keys():
-                Helper.set_property(
-                    queue, "force_continue", block.get("force_continue")
-                )
+                Helper.set_property(queue, "force_continue", block.get("force_continue"))
             else:
                 instance = self._create_executable_instances(block)
                 queue.push(instance)
@@ -144,6 +130,15 @@ class ScenarioManager(object):
                 instance = self._create_instance(row)
                 instances.append(instance)
                 StepArgument._put(row["step"], instance)
+        elif "parallel_with_config" in s_dict.keys():
+            steps_config_block = s_dict.get("parallel_with_config")
+            steps, config = self._split_steps_config(steps_config_block)
+            parallel = ParallelWithConfig([], config)
+            for row in steps:
+                instance = self._create_instance(row)
+                parallel.steps.append(instance)
+                StepArgument._put(row["step"], instance)
+            instances.append(parallel)
         else:
             instance = self._create_instance(s_dict)
             instances.append(instance)
@@ -173,10 +168,12 @@ class ScenarioManager(object):
         values = {}
         if cls_attrs_dict:
             cls_attrs_dict, with_vars = self._split_class_vars(cls_attrs_dict)
-            ret = self._set_values(instance, cls_attrs_dict, with_vars)
+            ret = self._replace_arguments(cls_attrs_dict, with_vars)
+            for dict_k, dict_v in ret.items():
+                Helper.set_property(instance, dict_k, dict_v)
             values.update(ret)
 
-        base_args = ["step", "symbol", "parallel", "io", "listeners"]
+        base_args = ["step", "symbol", "parallel", "listeners"]
         for arg in base_args:
             if arg == "listeners":
                 self._append_listeners(instance, s_dict.get(arg), values)
@@ -211,38 +208,43 @@ class ScenarioManager(object):
             del arguments["with_vars"]
         return arguments, with_vars
 
-    def _set_values(self, instance, arguments, with_vars):
+    def _replace_arguments(self, arguments, with_vars):
         """
-        Set parameters to the instance.
+        Nested replacement of argments.
 
-        Args:
-            instance (class): instance
+        First args:
             arguments (dict): Arguments of steps
             with_vars (dict): with_vars parameter
 
         Returns:
-            dict: Dictionary of arguments which was set
+            dict: Dictionary of arguments which was replaced.
         """
-        pattern = re.compile(r"{{(.*?)}}")
-        values = {}
-        for yaml_k, yaml_v in arguments.items():
-            js = json.dumps(yaml_v)
-            matches = pattern.findall(js)
+        if isinstance(arguments, dict):
+            return {
+                dict_k: self._replace_arguments(dict_v, with_vars)
+                for dict_k, dict_v in arguments.items()
+            }
+        elif isinstance(arguments, list):
+            return [self._replace_arguments(list_v, with_vars) for list_v in arguments]
+        elif isinstance(arguments, str):
+            matches = self._replace_vars_pattern.findall(arguments)
             for match in matches:
                 var_name = match.strip()
                 if not var_name:
                     raise InvalidParameter("Alternative argument was empty.")
-                cmd = with_vars[var_name]
-                if not cmd:
-                    raise ScenarioFileInvalid(
-                        "scenario file is invalid. 'with_vars' definition against %s does not exist."  # noqa
-                        % var_name
-                    )
-                js = self._replace_vars(js, var_name, cmd)
-                yaml_v = json.loads(js)
-            Helper.set_property(instance, yaml_k, yaml_v)
-            values[yaml_k] = yaml_v
-        return values
+                if var_name.startswith("env."):
+                    arguments = self._replace_envs(arguments, var_name)
+                else:
+                    cmd = with_vars[var_name]
+                    if not cmd:
+                        raise ScenarioFileInvalid(
+                            "scenario file is invalid. 'with_vars' definition against %s does not exist."  # noqa
+                            % var_name
+                        )
+                    arguments = self._replace_vars(arguments, var_name, cmd)
+            return arguments
+        else:
+            return arguments
 
     def _replace_vars(self, yaml_v, var_name, cmd):
         """
@@ -267,7 +269,9 @@ class ScenarioManager(object):
         """
         shell_output = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, shell=True
-        ).communicate()[0]
+        ).communicate()[  # nosec
+            0
+        ]
         shell_output = shell_output.strip()
         # remove head byte string
         shell_output = re.sub("^b", "", str(shell_output))
@@ -275,6 +279,43 @@ class ScenarioManager(object):
         shell_output = re.sub("'", "", str(shell_output))
 
         return re.sub(r"{{(\s?)%s(\s?)}}" % var_name, shell_output, yaml_v)
+
+    def _replace_envs(self, yaml_v, var_name):
+        """
+        This method replaces the value of {{ env.xxx }} from system environment values.
+        If values are not found in environment, key error will be raised.
+
+        Args:
+            yaml_v: Yaml value. Must contain {{ env.xxx }}
+            var_name: Name of env.xxx
+
+        Returns:
+            str: replaced value
+        """
+        env_value = os.environ[var_name[4:]]
+        return re.sub(r"{{(\s?)%s(\s?)}}" % var_name, env_value, yaml_v)
+
+    def _split_steps_config(self, block):
+        """
+        If "config" exist in arguments of parallel_with_config,
+        split into two(list of steps and config)
+
+        Args:
+            arguments (dict): List of steps
+
+        Returns:
+            tuple: (steps, config parameter)
+        """
+        exists_config = "config" in block.keys()
+        config = {}
+        if exists_config:
+            variables = block["config"]
+            for k, v in variables.items():
+                config[k] = v
+        steps = []
+        if "steps" in block.keys():
+            steps = block["steps"]
+        return steps, config
 
     def _append_listeners(self, instance, args, values):
         listeners = [StepStatusListener()]
@@ -313,4 +354,8 @@ class JsonScenarioManager(ScenarioManager):
     """
 
     def parse_file(self):
-        raise CliboaException("Not implemented yet")
+        """
+        Parse json format file to list object
+        """
+        parser = JsonScenarioParser(self._pj_scenario_file, self._cmn_scenario_file)
+        return parser.parse()

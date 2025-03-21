@@ -11,10 +11,10 @@
 # The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
 #
+from cliboa.adapter.sqlite import SqliteAdapter
 from cliboa.scenario.base import BaseStep
 from cliboa.scenario.validator import EssentialParameters
 from cliboa.util.constant import StepStatus
-from cliboa.util.sqlite import SqliteAdapter
 
 
 class BaseSqlite(BaseStep):
@@ -95,7 +95,6 @@ class SqliteTransaction(BaseSqlite):
 class SqliteQueryExecute(SqliteTransaction):
     """
     Execute only row query of insert, update or delete
-    If would like to execute read query, use SqliteRead class
     """
 
     def __init__(self):

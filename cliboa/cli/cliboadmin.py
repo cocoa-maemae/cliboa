@@ -41,14 +41,10 @@ class CliboAdmin(object):
         """
         if self._args.option == "init":
             self._init_project(self._args.dir_name)
-            print(
-                "Initialization of cliboa project '"
-                + self._args.dir_name
-                + "' was successful."
-            )
+            print("Initialization of cliboa project '" + self._args.dir_name + "' was successful.")
         elif self._args.option == "create":
             self._create_new_project(self._args.dir_name)
-            print("Adding a new project '" + self._args.dir_name + "' was successfule.")
+            print("Adding a new project '" + self._args.dir_name + "' was successful.")
 
     def _init_project(self, ini_dir):
         """
@@ -84,16 +80,14 @@ class CliboAdmin(object):
         copyfile(run_cmd_path, os.path.join(self._bin_dir, "clibomanager.py"))
 
         # copy Pipfile
-        pipfile_path, requirements_path = self._get_pipfile_and_requirements_path(
+        pipfile_path, pyproject_toml_path = self._get_pipfile_and_pyproject_toml_path(
             cliboa_install_path
         )
         copyfile(pipfile_path, os.path.join(ini_dir, "Pipfile"))
-        copyfile(requirements_path, os.path.join(ini_dir, "requirements.txt"))
+        copyfile(pyproject_toml_path, os.path.join(ini_dir, "requirements.txt"))
 
         # copy environment.py
-        cmn_env_path = os.path.join(
-            cliboa_install_path, "cliboa", "conf", "default_environment.py"
-        )
+        cmn_env_path = os.path.join(cliboa_install_path, "cliboa", "conf", "default_environment.py")
         copyfile(cmn_env_path, os.path.join(self._cmn_dir, "environment.py"))
 
         # copy logging.conf
@@ -118,47 +112,41 @@ class CliboAdmin(object):
 
         # make essential directories and files
         os.makedirs(os.path.join("project", new_project_dir), exist_ok=False)
-        os.makedirs(
-            os.path.join("project", new_project_dir, "scenario"), exist_ok=False
-        )
-        with open(
-            os.path.join("project", new_project_dir, "scenario.yml"), "w"
-        ) as yaml:
+        os.makedirs(os.path.join("project", new_project_dir, "scenario"), exist_ok=False)
+        with open(os.path.join("project", new_project_dir, "scenario.yml"), "w") as yaml:
             yaml.write("scenario:" + "\n")
 
-    def _get_pipfile_and_requirements_path(self, cliboa_install_path):
+    def _get_pipfile_and_pyproject_toml_path(self, cliboa_install_path):
         """
-        Get path of requirements.txt and Pipfile for current python version
+        Get path of pyproject.toml and Pipfile for current python version
         """
         py_ver_info = sys.version
         py_ver_info = py_ver_info.split(" ")
         py_ver = py_ver_info[0].split(".")
         py_major_ver = py_ver[0] + "." + py_ver[1]
-        py_major_ver_and_requirements = {
-            "3.5": "requirements.above35.txt",
-            "3.6": "requirements.above36.txt",
-            "3.7": "requirements.above37.txt",
-            "3.8": "requirements.above38.txt",
-            "3.9": "requirements.above39.txt",
+        py_major_ver_and_pyproject_toml = {
+            "3.7": "pyproject.above37.toml",
+            "3.8": "pyproject.above38.toml",
+            "3.9": "pyproject.above39.toml",
+            "3.10": "pyproject.above310.toml",
         }
         py_major_ver_and_pipfile = {
-            "3.5": "Pipfile.above35",
-            "3.6": "Pipfile.above36",
             "3.7": "Pipfile.above37",
             "3.8": "Pipfile.above38",
             "3.9": "Pipfile.above39",
+            "3.10": "Pipfile.above310",
         }
         pipfile_path = os.path.join(
             cliboa_install_path,
             "cliboa/template",
             py_major_ver_and_pipfile[py_major_ver],
         )
-        requirements_path = os.path.join(
+        pyproject_toml_path = os.path.join(
             cliboa_install_path,
             "cliboa/template",
-            py_major_ver_and_requirements[py_major_ver],
+            py_major_ver_and_pyproject_toml[py_major_ver],
         )
-        return pipfile_path, requirements_path
+        return pipfile_path, pyproject_toml_path
 
 
 class CommandArgumentParser(object):

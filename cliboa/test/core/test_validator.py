@@ -14,18 +14,21 @@
 import os
 import shutil
 import sys
+
 import pytest
 
-from cliboa.client import CommandArgumentParser
 from cliboa.conf import env
 from cliboa.core.validator import (
+    EssentialKeys,
     ProjectDirectoryExistence,
     ScenarioFileExistence,
+    ScenarioJsonKey,
+    ScenarioJsonType,
     ScenarioYamlKey,
     ScenarioYamlType,
-    EssentialKeys,
 )
-from cliboa.util.exception import FileNotFound, ScenarioFileInvalid, DirStructureInvalid
+from cliboa.interface import CommandArgumentParser
+from cliboa.util.exception import DirStructureInvalid, FileNotFound, ScenarioFileInvalid
 
 
 class TestValidators(object):
@@ -35,9 +38,7 @@ class TestValidators(object):
         sys.argv.append("spam")
         sys.argv.append("spam")
         self._pj_dir = os.path.join(env.BASE_DIR, "project", "spam")
-        self._scenario_file = os.path.join(
-            env.BASE_DIR, "project", "spam", "scenario.yml"
-        )
+        self._scenario_file = os.path.join(env.BASE_DIR, "project", "spam", "scenario.yml")
         os.makedirs(self._pj_dir, exist_ok=True)
 
     def teardown_method(self, method):
@@ -77,9 +78,7 @@ class TestValidators(object):
         with pytest.raises(ScenarioFileInvalid) as excinfo:
             valid_instance = ScenarioYamlType(test_data)
             valid_instance()
-        assert "scenario.yml is invalid. Check scenario.yml format." in str(
-            excinfo.value
-        )
+        assert "scenario.yml is invalid. Check scenario.yml format." in str(excinfo.value)
 
     def test_scenario_yaml_key_ok(self):
         """
@@ -124,6 +123,84 @@ class TestValidators(object):
             in str(excinfo.value)
         )
 
+    def test_scenario_json_type_ok(self):
+        """
+        scenario.json type is valid
+        """
+        test_data = {
+            "scenario": [
+                {
+                    "arguments": {"retry_count": 10},
+                    "class": "SftpDownload",
+                    "step": "sftp_download",
+                }
+            ]
+        }
+        valid_instance = ScenarioJsonType(test_data)
+        ret = valid_instance()
+        assert ret is None
+
+    def test_scenario_json_type_ng(self):
+        """
+        scenario.json type is invalid
+        """
+        test_data = [
+            {
+                "scenario": {
+                    "arguments": {"retry_count": 10},
+                    "class": "SftpDownload",
+                    "step": "sftp_download",
+                }
+            }
+        ]
+        with pytest.raises(ScenarioFileInvalid) as excinfo:
+            valid_instance = ScenarioJsonType(test_data)
+            valid_instance()
+        assert "scenario.json is invalid. Check scenario.json format." in str(excinfo.value)
+
+    def test_scenario_json_key_ok(self):
+        """
+        scenario.json essential key is valid
+        """
+        test_data = {
+            "scenario": [
+                {
+                    "arguments": {"retry_count": 10},
+                    "class": "SftpDownload",
+                    "step": "sftp_download",
+                }
+            ]
+        }
+        valid_instance = ScenarioJsonKey(test_data)
+        ret = valid_instance()
+        assert ret is None
+
+    def test_scenario_json_key_ng_with_no_content(self):
+        """
+        scenario.json essential key exists, but content does not exist.
+        """
+        test_data = {"scenario": ""}
+        with pytest.raises(ScenarioFileInvalid) as excinfo:
+            valid_instance = ScenarioJsonKey(test_data)
+            valid_instance()
+        assert (
+            "scenario.json is invalid. 'scenario:' key does not exist, or 'scenario:' key exists but content under 'scenario:' key does not exist."  # noqa
+            in str(excinfo.value)
+        )
+
+    def test_scenario_json_key_ng_with_no_scenario_key(self):
+        """
+        scenario.json essential key does not exist.
+        """
+        test_data = {"spam": ""}
+        with pytest.raises(ScenarioFileInvalid) as excinfo:
+            valid_instance = ScenarioJsonKey(test_data)
+            valid_instance()
+        assert (
+            "scenario.json is invalid. 'scenario:' key does not exist, or 'scenario:' key exists but content under 'scenario:' key does not exist."  # noqa
+            in str(excinfo.value)
+        )
+
     def test_project_directory_existence_ok(self):
         """
         Specified directory exists
@@ -140,9 +217,7 @@ class TestValidators(object):
         with pytest.raises(DirStructureInvalid) as excinfo:
             valid_instance = ProjectDirectoryExistence()
             valid_instance(self._pj_dir)
-        assert "Project directory %s does not exist" % self._pj_dir in str(
-            excinfo.value
-        )
+        assert "Project directory %s does not exist" % self._pj_dir in str(excinfo.value)
 
     def test_scenario_file_existence_ok(self):
         """
@@ -168,12 +243,7 @@ class TestValidators(object):
         """
         Block requires both "step" and "class"
         """
-        test_yaml = [
-            {
-                "step": "test step",
-                "class": "SampleClass",
-            }
-        ]
+        test_yaml = [{"step": "test step", "class": "SampleClass"}]
         valid_instance = EssentialKeys(test_yaml)
         valid_instance()
 
@@ -185,14 +255,8 @@ class TestValidators(object):
         test_yaml = [
             {
                 "parallel": [
-                    {
-                        "step": "test step 1",
-                        "class": "SampleClass",
-                    },
-                    {
-                        "step": "test step 2",
-                        "class": "SampleClass",
-                    },
+                    {"step": "test step 1", "class": "SampleClass"},
+                    {"step": "test step 2", "class": "SampleClass"},
                 ]
             }
         ]
@@ -205,6 +269,25 @@ class TestValidators(object):
         does not require "step" or "class"
         """
         test_yaml = [{"multi_process_count": 1}]
+        valid_instance = EssentialKeys(test_yaml)
+        valid_instance()
+
+    def test_essential_keys_ok_4(self):
+        """
+        If block starts with "parallel_with_config"
+        all steps under the "parallel_with_config" requires both "step" and "class"
+        """
+        test_yaml = [
+            {
+                "parallel_with_config": {
+                    "config": {"multi_process_count": 2},
+                    "steps": [
+                        {"step": "test step 1", "class": "SampleClass"},
+                        {"step": "test step 2", "class": "SampleClass"},
+                    ],
+                }
+            }
+        ]
         valid_instance = EssentialKeys(test_yaml)
         valid_instance()
 
@@ -226,14 +309,67 @@ class TestValidators(object):
         test_yaml = [
             {
                 "parallel": [
-                    {
-                        "step": "test step 1",
-                        "class": "SampleClass",
-                    },
-                    {
-                        "class": "SampleClass",
-                    },
+                    {"step": "test step 1", "class": "SampleClass"},
+                    {"class": "SampleClass"},
                 ]
+            }
+        ]
+        with pytest.raises(ScenarioFileInvalid) as excinfo:
+            valid_instance = EssentialKeys(test_yaml)
+            valid_instance()
+        assert "scenario.yml is invalid. 'step:' does not exist." in str(excinfo.value)
+
+    def test_essential_keys_ng_3(self):
+        """
+        If block starts with "parallel_with_config"
+        all steps under the "parallel_with_config" requires both "step" and "class"
+        """
+        test_yaml = [
+            {
+                "parallel_with_config": {
+                    "steps": [
+                        {"step": "test step 1", "class": "SampleClass"},
+                        {"step": "test step 2", "class": "SampleClass"},
+                    ],
+                }
+            }
+        ]
+        with pytest.raises(ScenarioFileInvalid) as excinfo:
+            valid_instance = EssentialKeys(test_yaml)
+            valid_instance()
+        assert (
+            "scenario.yml is invalid. 'config:' key does not exist, or 'config:' value does not exist."  # noqa
+            in str(excinfo.value)
+        )  # noqa
+
+    def test_essential_keys_ng_4(self):
+        """
+        If block starts with "parallel_with_config"
+        all steps under the "parallel_with_config" requires both "step" and "class"
+        """
+        test_yaml = [{"parallel_with_config": {"config": {"multi_process_count": 2}}}]
+        with pytest.raises(ScenarioFileInvalid) as excinfo:
+            valid_instance = EssentialKeys(test_yaml)
+            valid_instance()
+        assert (
+            "scenario.yml is invalid. 'steps:' key does not exist, or 'steps:' value does not exist."  # noqa
+            in str(excinfo.value)
+        )  # noqa
+
+    def test_essential_keys_ng_5(self):
+        """
+        If block starts with "parallel_with_config"
+        all steps under the "parallel_with_config" requires both "step" and "class"
+        """
+        test_yaml = [
+            {
+                "parallel_with_config": {
+                    "config": {"multi_process_count": 2},
+                    "steps": [
+                        {"step": "test step 1", "class": "SampleClass"},
+                        {"class": "SampleClass"},
+                    ],
+                }
             }
         ]
         with pytest.raises(ScenarioFileInvalid) as excinfo:

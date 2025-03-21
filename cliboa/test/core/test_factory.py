@@ -16,11 +16,12 @@ import sys
 
 import pytest
 
-from cliboa.client import CommandArgumentParser
 from cliboa.core.factory import CustomInstanceFactory, ScenarioManagerFactory, StepExecutorFactory
-from cliboa.core.manager import YamlScenarioManager
-from cliboa.core.strategy import MultiProcExecutor, SingleProcExecutor
+from cliboa.core.manager import JsonScenarioManager, YamlScenarioManager
+from cliboa.core.strategy import MultiProcExecutor, MultiProcWithConfigExecutor, SingleProcExecutor
+from cliboa.interface import CommandArgumentParser
 from cliboa.test import BaseCliboaTest
+from cliboa.util.parallel_with_config import ParallelWithConfig
 
 
 class TestFactory(BaseCliboaTest):
@@ -28,14 +29,27 @@ class TestFactory(BaseCliboaTest):
         cmd_parser = CommandArgumentParser()
         self._cmd_args = cmd_parser.parse()
 
+    def setup_json_argv(self):
+        sys.argv.clear()
+        sys.argv.append("project_name")
+        sys.argv.append("spam")
+        sys.argv.append("--format")
+        sys.argv.append("json")
+        cmd_parser = CommandArgumentParser()
+        return cmd_parser.parse()
+
 
 class TestScenarioManagerFactory(TestFactory):
     def test_create_ok(self):
         """
-        Succeeded to create instance with yml
+        Succeeded to create instance with yml and json
         """
         manager = ScenarioManagerFactory.create(self._cmd_args)
         self.assertTrue(isinstance(manager, type(YamlScenarioManager(self._cmd_args))))
+
+        cmd_args = self.setup_json_argv()
+        manager = ScenarioManagerFactory.create(cmd_args)
+        self.assertTrue(isinstance(manager, type(JsonScenarioManager(cmd_args))))
 
     def test_create_ng(self):
         """
@@ -61,6 +75,15 @@ class TestStepExecutorFactory(TestFactory):
         """
         s = StepExecutorFactory.create(["1", "2"])
         self.assertTrue(isinstance(s, type(MultiProcExecutor(None))))
+
+    def test_create_multi_with_config(self):
+        """
+        Succeeded to create MultiProcess instance with config
+        """
+        instance = [ParallelWithConfig(["1", "2"], {"multi_process_count": 2})]
+        s = StepExecutorFactory.create(instance)
+        print(s)
+        self.assertTrue(isinstance(s, type(MultiProcWithConfigExecutor(instance))))
 
 
 class TestCustomInstanceFactory(TestFactory):

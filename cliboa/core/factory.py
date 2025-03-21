@@ -11,10 +11,12 @@
 # The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
 #
-from cliboa.core.manager import JsonScenarioManager, YamlScenarioManager  # noqa
-from cliboa.core.strategy import MultiProcExecutor, SingleProcExecutor
-from cliboa.util.class_util import ClassUtil
 from importlib import import_module
+
+from cliboa.core.manager import JsonScenarioManager, YamlScenarioManager  # noqa
+from cliboa.core.strategy import MultiProcExecutor, MultiProcWithConfigExecutor, SingleProcExecutor
+from cliboa.util.class_util import ClassUtil
+from cliboa.util.parallel_with_config import ParallelWithConfig
 
 
 class ScenarioManagerFactory(object):
@@ -52,7 +54,8 @@ class StepExecutorFactory(object):
         """
         if len(obj) > 1:
             return MultiProcExecutor(obj)
-
+        elif len(obj) == 1 and isinstance(obj[0], ParallelWithConfig):
+            return MultiProcWithConfigExecutor(obj)
         return SingleProcExecutor(obj)
 
 

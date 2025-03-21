@@ -17,11 +17,10 @@ import re
 import tempfile
 from abc import abstractmethod
 
+from cliboa.adapter.file import File
 from cliboa.conf import env
-from cliboa.scenario.validator import IOOutput
-from cliboa.util.cache import StepArgument, StorageIO
+from cliboa.util.cache import StepArgument
 from cliboa.util.exception import FileNotFound, InvalidParameter
-from cliboa.util.file import File
 
 
 class BaseStep(object):
@@ -30,11 +29,9 @@ class BaseStep(object):
     """
 
     def __init__(self):
-        self._s = StorageIO()
         self._step = None
         self._symbol = None
         self._parallel = None
-        self._io = None
         self._logger = None
         self._listeners = []
 
@@ -46,9 +43,6 @@ class BaseStep(object):
 
     def parallel(self, parallel):
         self._parallel = parallel
-
-    def io(self, io):
-        self._io = io
 
     def logger(self, logger):
         self._logger = logger
@@ -133,9 +127,7 @@ class BaseStep(object):
         if src is None:
             return src
         if isinstance(src, dict) and "content" in src:
-            with tempfile.NamedTemporaryFile(
-                mode="w", encoding=encoding, delete=False
-            ) as fp:
+            with tempfile.NamedTemporaryFile(mode="w", encoding=encoding, delete=False) as fp:
                 fp.write(src["content"])
                 return fp.name
         elif isinstance(src, dict) and "file" in src:
@@ -151,21 +143,3 @@ class BaseStep(object):
         """
         # TODO Currently not doing anything
         raise e
-
-
-class Stdout(BaseStep):
-    """
-    @deprecated
-    Standard output for io: input
-    """
-
-    def __init__(self):
-        super().__init__()
-
-    def execute(self, *args):
-        output_valid = IOOutput(self._io)
-        output_valid()
-
-        with open(self._s.cache_file, "r", encoding="utf-8") as f:
-            for l in f:
-                print(l)

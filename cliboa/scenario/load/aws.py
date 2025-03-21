@@ -46,9 +46,7 @@ class S3Upload(BaseS3):
     def execute(self, *args):
         super().execute()
 
-        valid = EssentialParameters(
-            self.__class__.__name__, [self._src_dir, self._src_pattern]
-        )
+        valid = EssentialParameters(self.__class__.__name__, [self._src_dir, self._src_pattern])
         valid()
 
         adapter = S3Adapter(self._access_key, self._secret_key, self._profile)
@@ -58,9 +56,13 @@ class S3Upload(BaseS3):
 
         if len(files) > 0:
             for f in files:
-                bucket.upload_file(
-                    Key=os.path.join(self._key, os.path.basename(f)), Filename=f
-                )
+                if self._key:
+                    if not self._key.endswith("/"):
+                        self._key = self._key + "/"
+                    s = "{}{}".format(self._key, os.path.basename(f))
+                    bucket.upload_file(Key=s, Filename=f)
+                else:
+                    bucket.upload_file(Key=os.path.basename(f), Filename=f)
         else:
             self._logger.info(
                 "Files to upload do not exist. File pattern: {}".format(

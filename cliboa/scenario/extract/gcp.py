@@ -13,19 +13,15 @@
 #
 import json
 import os
-import random
 import re
-import string
 from datetime import datetime
 
-import pandas
-from google.cloud import bigquery
-
+from cliboa.adapter.gcp import BigQueryAdapter, FireStoreAdapter, GcsAdapter
 from cliboa.scenario.gcp import BaseBigQuery, BaseFirestore, BaseGcs
 from cliboa.scenario.validator import EssentialParameters
 from cliboa.util.cache import ObjectStore
+from cliboa.util.constant import StepStatus
 from cliboa.util.exception import InvalidParameter
-from cliboa.util.gcp import BigQuery, Firestore, Gcs, ServiceAccount
 from cliboa.util.string import StringUtil
 
 
@@ -78,28 +74,17 @@ class BigQueryRead(BaseBigQuery):
 
     def _save_to_cache(self):
         self._logger.info("Save data to on memory")
-        if isinstance(self._credentials, str):
-            self._logger.warning(
-                (
-                    "DeprecationWarning: "
-                    "In the near future, "
-                    "the `credentials` will be changed to accept only dictionary types. "
-                    "Please see more information "
-                    "https://github.com/BrainPad/cliboa/blob/master/docs/modules/bigquery_read.md"
-                )
-            )
-            key_filepath = self._credentials
-        else:
-            key_filepath = self._source_path_reader(self._credentials)
-        df = pandas.read_gbq(
-            query="SELECT * FROM %s.%s" % (self._dataset, self._tblname)
-            if self._query is None
-            else self._query,
-            dialect="standard",
+
+        client = BigQueryAdapter().get_client(
+            credentials=self.get_credentials(),
+            project=self._project_id,
             location=self._location,
-            project_id=self._project_id,
-            credentials=ServiceAccount.auth(key_filepath),
         )
+
+        query = "SELECT * FROM %s.%s" % (self._dataset, self._tblname)
+        query = self._query if self._query else query
+
+        df = client.query(query).to_dataframe()
         ObjectStore.put(self._key, df)
 
     def _save_as_file_via_gcs(self):
@@ -107,49 +92,36 @@ class BigQueryRead(BaseBigQuery):
         os.makedirs(self._dest_dir, exist_ok=True)
 
         ymd_hms = datetime.now().strftime("%Y%m%d%H%M%S%f")
-        path = "%s-%s" % (StringUtil().random_str(self._RANDOM_STR_LENGTH), ymd_hms,)
+        path = "%s-%s" % (
+            StringUtil().random_str(self._RANDOM_STR_LENGTH),
+            ymd_hms,
+        )
         prefix = "%s/%s/%s" % (self._dataset, self._tblname, path)
 
-        if isinstance(self._credentials, str):
-            self._logger.warning(
-                (
-                    "DeprecationWarning: "
-                    "In the near future, "
-                    "the `credentials` will be changed to accept only dictionary types. "
-                    "Please see more information "
-                    "https://github.com/BrainPad/cliboa/blob/master/docs/modules/bigquery_read.md"
-                )
-            )
-            key_filepath = self._credentials
-        else:
-            key_filepath = self._source_path_reader(self._credentials)
-        gbq_client = BigQuery.get_bigquery_client(key_filepath)
+        gbq_client = BigQueryAdapter().get_client(credentials=self.get_credentials())
+
         if self._dataset and self._tblname:
             table_ref = gbq_client.dataset(self._dataset).table(self._tblname)
         elif self._dataset and not self._tblname:
-            tmp_tbl = (
-                "tmp_"
-                + StringUtil().random_str(self._RANDOM_STR_LENGTH)
-                + "_"
-                + ymd_hms
-            )
+            tmp_tbl = "tmp_" + StringUtil().random_str(self._RANDOM_STR_LENGTH) + "_" + ymd_hms
             table_ref = gbq_client.dataset(self._dataset).table(tmp_tbl)
-        gcs_client = Gcs.get_gcs_client(key_filepath)
+
+        gcs_client = GcsAdapter().get_client(credentials=self.get_credentials())
         gcs_bucket = gcs_client.bucket(self._bucket)
 
         # extract job config settings
-        ext_job_config = BigQuery.get_extract_job_config()
-        ext_job_config.compression = BigQuery.get_compression_type()
+        ext_job_config = BigQueryAdapter.get_extract_job_config()
+        ext_job_config.compression = BigQueryAdapter.get_compression_type()
         ext = ".csv"
         if self._filename:
             _, ext = os.path.splitext(self._filename)
             support_ext = [".csv", ".json"]
             if ext not in support_ext:
                 raise InvalidParameter("%s is not supported as filename." % ext)
-        ext_job_config.destination_format = BigQuery.get_destination_format(ext)
+        ext_job_config.destination_format = BigQueryAdapter.get_destination_format(ext)
 
         comp_format_and_ext = {"GZIP": ".gz"}
-        comp_ext = comp_format_and_ext.get(str(BigQuery.get_compression_type()))
+        comp_ext = comp_format_and_ext.get(str(BigQueryAdapter.get_compression_type()))
         if self._filename:
             dest_gcs = "gs://%s/%s/%s%s" % (
                 self._bucket,
@@ -162,9 +134,9 @@ class BigQueryRead(BaseBigQuery):
 
         # Execute query.
         if self._query:
-            query_job_config = BigQuery.get_query_job_config()
+            query_job_config = BigQueryAdapter.get_query_job_config()
             query_job_config.destination = table_ref
-            query_job_config.write_disposition = BigQuery.get_write_disposition()
+            query_job_config.write_disposition = BigQueryAdapter.get_write_disposition()
             query_job = gbq_client.query(
                 self._query, location=self._location, job_config=query_job_config
             )
@@ -187,151 +159,6 @@ class BigQueryRead(BaseBigQuery):
 
         # Cleanup temporary files
         for blob in gcs_bucket.list_blobs(prefix=prefix):
-            blob.delete()
-
-
-class BigQueryReadCache(BaseBigQuery):
-    """
-    @deprecated
-    Please Use BigQueryRead instead.
-
-    Get data from BigQuery and cache them as pandas.dataframe format.
-
-    Use {BigQueryFileDownload} if the result query is estimated to be large.
-    """
-
-    def __init__(self):
-        super().__init__()
-        self._key = None
-        self._query = None
-
-    def key(self, key):
-        self._key = key
-
-    def query(self, query):
-        self._query = query
-
-    def _get_query(self):
-        if self._query is None:
-            return "SELECT * FROM %s.%s" % (self._dataset, self._tblname)
-        else:
-            return self._query
-
-    def execute(self, *args):
-        self._logger.warning("Deprecated. Please Use BigQueryRead instead.")
-
-        super().execute()
-        valid = EssentialParameters(self.__class__.__name__, [self._key])
-        valid()
-
-        if isinstance(self._credentials, str):
-            self._logger.warning(
-                (
-                    "DeprecationWarning: "
-                    "In the near future, "
-                    "the `credentials` will be changed to accept only dictionary types. "
-                )
-            )
-            key_filepath = self._credentials
-        else:
-            key_filepath = self._source_path_reader(self._credentials)
-        df = pandas.read_gbq(
-            query=self._get_query(),
-            dialect="standard",
-            location=self._location,
-            project_id=self._project_id,
-            credentials=ServiceAccount.auth(key_filepath),
-        )
-        ObjectStore.put(self._key, df)
-
-
-class BigQueryFileDownload(BaseBigQuery):
-    """
-    @deprecated
-    Please Use BigQueryRead instead.
-
-    Download query result as a csv file.
-
-    This class saves BigQuery result as a temporary file in GCS, and then download.
-    Download file could be a multiple if file size exceed 1GB.
-    """
-
-    def __init__(self):
-        super().__init__()
-        self._bucket = None
-        self._dest_dir = None
-        self._filename = None
-
-    def bucket(self, bucket):
-        self._bucket = bucket
-
-    def dest_dir(self, dest_dir):
-        self._dest_dir = dest_dir
-
-    def filename(self, filename):
-        self._filename = filename
-
-    def execute(self, *args):
-        self._logger.warning("Deprecated. Please Use BigQueryRead instead.")
-
-        super().execute()
-
-        valid = EssentialParameters(
-            self.__class__.__name__, [self._tblname, self._bucket, self._dest_dir]
-        )
-        valid()
-
-        os.makedirs(self._dest_dir, exist_ok=True)
-
-        if isinstance(self._credentials, str):
-            self._logger.warning(
-                (
-                    "DeprecationWarning: "
-                    "In the near future, "
-                    "the `credentials` will be changed to accept only dictionary types. "
-                )
-            )
-            key_filepath = self._credentials
-        else:
-            key_filepath = self._source_path_reader(self._credentials)
-        gbq_client = BigQuery.get_bigquery_client(key_filepath)
-        gbq_ref = gbq_client.dataset(self._dataset).table(self._tblname)
-
-        gcs_client = Gcs.get_gcs_client(key_filepath)
-        gcs_bucket = gcs_client.bucket(self._bucket)
-
-        ymd_hms = datetime.now().strftime("%Y%m%d%H%M%S%f")
-        path = "%s-%s" % ("".join(random.choices(string.ascii_letters, k=8)), ymd_hms)
-        prefix = "%s/%s/%s" % (self._dataset, self._tblname, path)
-
-        """
-        gsc dir -> gs://{bucket_name}
-                       /{dataset_name}/{table_name}
-                       /{XXXXXXXX}-{yyyyMMddHHmmssSSS}/*.csv.gz
-        """
-        if self._filename:
-            dest_gcs = "gs://%s/%s/%s*.csv.gz" % (self._bucket, prefix, self._filename)
-        else:
-            dest_gcs = "gs://%s/%s/*.csv.gz" % (self._bucket, prefix)
-
-        # job config settings
-        job_config = bigquery.ExtractJobConfig()
-        job_config.compression = bigquery.Compression.GZIP
-        job_config.destination_format = bigquery.DestinationFormat.CSV
-
-        # Execute query.
-        job = gbq_client.extract_table(
-            gbq_ref, dest_gcs, job_config=job_config, location=self._location
-        )
-        job.result()
-
-        # Download from gcs
-        for blob in gcs_client.list_blobs(gcs_bucket, prefix=prefix):
-            dest = os.path.join(self._dest_dir, os.path.basename(blob.name))
-            blob.download_to_filename(dest)
-
-        # Cleanup temporary files
-        for blob in gcs_client.list_blobs(gcs_bucket, prefix=prefix):
             blob.delete()
 
 
@@ -365,32 +192,17 @@ class GcsDownload(BaseGcs):
         valid = EssentialParameters(self.__class__.__name__, [self._src_pattern])
         valid()
 
-        if isinstance(self._credentials, str):
-            self._logger.warning(
-                (
-                    "DeprecationWarning: "
-                    "In the near future, "
-                    "the `credentials` will be changed to accept only dictionary types. "
-                    "Please see more information "
-                    "https://github.com/BrainPad/cliboa/blob/master/docs/modules/gcs_download.md"
-                )
-            )
-            key_filepath = self._credentials
-        else:
-            key_filepath = self._source_path_reader(self._credentials)
-        client = Gcs.get_gcs_client(key_filepath)
+        os.makedirs(self._dest_dir, exist_ok=True)
+
+        client = GcsAdapter().get_client(credentials=self.get_credentials())
         bucket = client.bucket(self._bucket)
         dl_files = []
-        for blob in client.list_blobs(
-            bucket, prefix=self._prefix, delimiter=self._delimiter
-        ):
+        for blob in client.list_blobs(bucket, prefix=self._prefix, delimiter=self._delimiter):
             r = re.compile(self._src_pattern)
-            if not r.fullmatch(blob.name):
+            if not r.fullmatch(os.path.basename(blob.name)):
                 continue
             dl_files.append(blob.name)
-            blob.download_to_filename(
-                os.path.join(self._dest_dir, os.path.basename(blob.name))
-            )
+            blob.download_to_filename(os.path.join(self._dest_dir, os.path.basename(blob.name)))
 
         ObjectStore.put(self._step, dl_files)
 
@@ -408,7 +220,7 @@ class GcsDownloadFileDelete(BaseGcs):
 
         if len(dl_files) > 0:
             self._logger.info("Delete files %s" % dl_files)
-            client = self._gcs_client()
+            client = GcsAdapter().get_client(credentials=self.get_credentials())
             bucket = client.bucket(super().get_step_argument("bucket"))
             for blob in client.list_blobs(
                 bucket,
@@ -443,22 +255,54 @@ class FirestoreDocumentDownload(BaseFirestore):
         )
         valid()
 
-        if isinstance(self._credentials, str):
-            self._logger.warning(
-                (
-                    "DeprecationWarning: "
-                    "In the near future, "
-                    "the `credentials` will be changed to accept only dictionary types. "
-                    "Please see more information "
-                    "https://github.com/BrainPad/cliboa/blob/master/docs/modules/firestore_document_download.md"  # noqa
-                )
-            )
-            key_filepath = self._credentials
-        else:
-            key_filepath = self._source_path_reader(self._credentials)
-        firestore_client = Firestore.get_firestore_client(key_filepath)
-        ref = firestore_client.document(self._collection, self._document)
+        os.makedirs(self._dest_dir, exist_ok=True)
+
+        client = FireStoreAdapter().get_client(self.get_credentials())
+        ref = client.document(self._collection, self._document)
         doc = ref.get()
 
         with open(os.path.join(self._dest_dir, doc.id), mode="wt") as f:
             f.write(json.dumps(doc.to_dict()))
+
+
+class GcsFileExistsCheck(BaseGcs):
+    """
+    File check in GCS
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._prefix = None
+        self._delimiter = None
+        self._src_pattern = None
+
+    def prefix(self, prefix):
+        self._prefix = prefix
+
+    def delimiter(self, delimiter):
+        self._delimiter = delimiter
+
+    def src_pattern(self, src_pattern):
+        self._src_pattern = src_pattern
+
+    def execute(self, *args):
+        super().execute()
+
+        valid = EssentialParameters(self.__class__.__name__, [self._src_pattern])
+        valid()
+
+        client = GcsAdapter().get_client(credentials=self.get_credentials())
+        dl_files = []
+        bucket = client.bucket(super().get_step_argument("bucket"))
+
+        for blob in client.list_blobs(bucket, prefix=self._prefix, delimiter=self._delimiter):
+            r = re.compile(self._src_pattern)
+            if not r.fullmatch(os.path.basename(blob.name)):
+                continue
+            dl_files.append(blob.name)
+
+        if len(dl_files) == 0:
+            self._logger.info("File not found in GCS. After process will not be processed")
+            return StepStatus.SUCCESSFUL_TERMINATION
+
+        self._logger.info("File was found in GCS. After process will be processed")

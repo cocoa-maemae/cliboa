@@ -15,7 +15,7 @@ import os
 import shutil
 
 from cliboa.conf import env
-from cliboa.scenario.transform.gpg import GpgEncrypt, GpgDecrypt
+from cliboa.scenario.transform.gpg import GpgDecrypt, GpgEncrypt
 from cliboa.test import BaseCliboaTest
 from cliboa.util.gpg import Gpg
 from cliboa.util.helper import Helper
@@ -65,8 +65,6 @@ class TestGpg(BaseCliboaTest):
         Helper.set_property(instance, "passphrase", "password")
         instance.execute()
 
-        with open(
-            os.path.join(self._result_dir, self._file_name), mode="r", encoding="utf-8"
-        ) as f:
+        with open(os.path.join(self._result_dir, self._file_name), mode="r", encoding="utf-8") as f:
             txt = f.read()
             assert txt == "This is test"

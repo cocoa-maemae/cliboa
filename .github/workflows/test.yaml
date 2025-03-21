@@ -1,13 +1,15 @@
 name: cliboa-test
 
-on: [pull_request]
- 
+on:
+  pull_request:
+  workflow_dispatch:
+
 jobs:
   test_by_multiple_python_versions:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python_versions: [3.5, 3.6, 3.7, 3.8, 3.9]
+        python_versions: [3.7, 3.8, 3.9, '3.10']
     steps:
       - uses: actions/checkout@v2
       - name: Setup Python
@@ -17,19 +19,32 @@ jobs:
       - name: install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pipenv
-          py_ver=${{ matrix.python_versions }}
-          pipfile_ver=${py_ver//./}
-          cp cliboa/template/Pipfile.above"$pipfile_ver" Pipfile
-          pipenv install . --sequential
-          pipenv install --dev --skip-lock --sequential
+          pip install poetry
+          py_version=${{ matrix.python_versions }}
+          pyproject_toml_version=${py_version//./}
+          cp cliboa/template/pyproject.above"$pyproject_toml_version".toml pyproject.toml
+          poetry env use ${pyproject_toml_version}
+          poetry install
       - name: execute flake8
         run: |
-          pipenv run flake8
+          poetry run flake8 .
+      - name: check black format
+        run: |
+          poetry run black --check .
+      - name: check isort
+        run: |
+          poetry run isort --check
       - name: execute unittest and instrument coverage
         run: |
-          pipenv run coverage
-      - name: Uupload coverage to codecov
-        uses: codecov/codecov-action@v1
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          poetry run pytest --cov cliboa --cov-report term-missing --cov-report=xml
+      - name: check layer dependency
+        run: |
+          cd cliboa
+          poetry run lint-imports
+      - name: execute bandit
+        run: |
+          if [ ${{ matrix.python_versions }} = 3.7 ]; then
+            echo "bandit does not support python${{ matrix.python_versions }}"
+          else
+            poetry run bandit --severity-level high -r cliboa
+          fi

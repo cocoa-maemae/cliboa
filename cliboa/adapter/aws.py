@@ -12,6 +12,7 @@
 #
 import boto3
 from boto3.session import Session
+
 from cliboa.util.exception import InvalidParameter
 
 
@@ -20,9 +21,7 @@ class S3Adapter(object):
     Adapter of AWS S3
     """
 
-    def __init__(
-        self, access_key: str = None, secret_key: str = None, profile: str = None
-    ):
+    def __init__(self, access_key: str = None, secret_key: str = None, profile: str = None):
 
         if (access_key and secret_key) and profile:
             raise InvalidParameter(

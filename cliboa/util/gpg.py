@@ -1,6 +1,8 @@
-import gnupg
 import logging
 import os
+
+import gnupg
+
 from cliboa.util.exception import CliboaException
 
 
@@ -48,9 +50,7 @@ class Gpg(object):
         for key in keys:
             self._gpg.trust_keys(key["fingerprint"], trust_level)
 
-    def encrypt(
-        self, src_path, dest_path, recipients, passphrase=None, always_trust=False
-    ):
+    def encrypt(self, src_path, dest_path, recipients, passphrase=None, always_trust=False):
         with open(src_path, "rb") as f:
             status = self._gpg.encrypt_file(
                 file=f,

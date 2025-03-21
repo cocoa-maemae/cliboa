@@ -1,0 +1,45 @@
+name: cliboa-deploy
+
+on:
+  push:
+    branches:
+      - "223" # debug
+  workflow_dispatch:
+    inputs:
+      username:
+        description: PyPI username
+        required: true
+        default: "spam"
+      password:
+        description: PyPI password
+        required: true
+        default: "spam"
+      is_test:
+        description: if upload pypi test repository
+        required: false
+        default: ""
+
+jobs:
+  deploy_to_pypi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: install dependencies
+        run: |
+          sudo python3 -m pip install twine
+      - name: create pypi package
+        run: |
+          # create package
+          sudo python3 setup.py sdist bdist_wheel
+      - name: upload to pypi
+        run: |
+          # upload to pypi
+          PYPI_USERNAME=`jq -r '.inputs.username' $GITHUB_EVENT_PATH`
+          PYPI_PASSWORD=`jq -r '.inputs.password' $GITHUB_EVENT_PATH`
+          echo ::add-mask::$PYPI_USERNAME
+          echo ::add-mask::$PYPI_PASSWORD
+          sudo python3 tools/script/deploy_to_pypi.py $PYPI_USERNAME $PYPI_PASSWORD "${{ github.event.inputs.is_test }}"

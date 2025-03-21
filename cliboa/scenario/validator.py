@@ -1,5 +1,5 @@
 #
-# Copyright 2019 BrainPad Inc. All Rights Reserved.
+# Copyright BrainPad Inc. All Rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -11,10 +11,9 @@
 # The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
 #
-
-from cliboa.util.exception import InvalidParameter, ScenarioFileInvalid, SqliteInvalid
+from cliboa.adapter.sqlite import SqliteAdapter
+from cliboa.util.exception import InvalidParameter, SqliteInvalid
 from cliboa.util.lisboa_log import LisboaLog
-from cliboa.util.sqlite import SqliteAdapter
 
 
 class EssentialParameters(object):
@@ -28,14 +27,14 @@ class EssentialParameters(object):
             cls_name: class name which has validation target parameters
             param_list: list of validation target parameters
         """
-        self.__cls_name = cls_name
-        self.__param_list = param_list
+        self._cls_name = cls_name
+        self._param_list = param_list
 
     def __call__(self):
-        for p in self.__param_list:
+        for p in self._param_list:
             if not p:
                 raise InvalidParameter(
-                    "The essential parameter is not specified in %s." % self.__cls_name
+                    "The essential parameter is not specified in %s." % self._cls_name
                 )
 
 
@@ -51,51 +50,24 @@ class SqliteTableExistence(object):
             tblname: table name
             returns_bool: return bool or not
         """
-        self.__sqlite_adptr = SqliteAdapter()
-        self.__dbname = dbname
-        self.__tblname = tblname
-        self.__returns_bool = returns_bool
+        self._sqlite_adptr = SqliteAdapter()
+        self._dbname = dbname
+        self._tblname = tblname
+        self._returns_bool = returns_bool
         self._logger = LisboaLog.get_logger(__name__)
 
     def __call__(self):
         try:
-            self.__sqlite_adptr.connect(self.__dbname)
-            cur = self.__sqlite_adptr.fetch(
-                'SELECT name FROM sqlite_master WHERE type="table" AND name="%s"'
-                % self.__tblname
+            self._sqlite_adptr.connect(self._dbname)
+            cur = self._sqlite_adptr.fetch(
+                'SELECT name FROM sqlite_master WHERE type="table" AND name="%s"' % self._tblname
             )
             result = cur.fetchall()
-            if self.__returns_bool is True:
+            if self._returns_bool is True:
                 return True if result else False
 
-            if not result and self.__returns_bool is False:
-                raise SqliteInvalid("Sqlite table %s not found" % self.__tblname)
+            if not result and self._returns_bool is False:
+                raise SqliteInvalid("Sqlite table %s not found" % self._tblname)
 
         finally:
-            self.__sqlite_adptr.close()
-
-
-class IOInput(object):
-    """
-    Validation for io: input
-    """
-
-    def __init__(self, io):
-        self.__io = io
-
-    def __call__(self):
-        if self.__io != "input":
-            raise ScenarioFileInvalid("io: input is not specified.")
-
-
-class IOOutput(object):
-    """
-    Validation for io: input
-    """
-
-    def __init__(self, io):
-        self.__io = io
-
-    def __call__(self):
-        if self.__io != "output":
-            raise ScenarioFileInvalid("io: output is not specified.")
+            self._sqlite_adptr.close()

@@ -17,22 +17,16 @@ RUN apt update -y && \
                    tk-dev \
                    pinentry-curses \
                    python \
-                   python-pip \
                    python3 \
                    python3-pip \
                    vim \
                    virtualenv \
                    wget \
-                   zlib1g-dev
+                   zlib1g-dev \
+                   libpq-dev
 
 # Download multiple python versions which cliboa supports
 RUN cd /usr/local/ && \
-    wget https://www.python.org/ftp/python/3.5.9/Python-3.5.9.tgz && \
-    tar -xzvf Python-3.5.9.tgz && \
-    rm -rf Python-3.5.9.tgz && \
-    wget https://www.python.org/ftp/python/3.6.9/Python-3.6.9.tgz && \
-    tar -xzvf Python-3.6.9.tgz && \
-    rm -rf Python-3.6.9.tgz && \
     wget https://www.python.org/ftp/python/3.8.11/Python-3.8.11.tgz && \
     tar -xzvf Python-3.8.11.tgz && \
     rm -rf Python-3.8.11.tgz && \
@@ -41,14 +35,6 @@ RUN cd /usr/local/ && \
     rm -rf Python-3.9.6.tgz
 
 # Build multiple python versions which cliboa supports
-RUN cd /usr/local/Python-3.5.9 && \
-    ./configure --prefix=/usr/local/bin/python3.5 && \
-    make && \
-    make altinstall
-RUN cd /usr/local/Python-3.6.9 && \
-    ./configure --prefix=/usr/local/bin/python3.6 && \
-    make && \
-    make altinstall
 RUN cd /usr/local/Python-3.8.11 && \
     ./configure --prefix=/usr/local/bin/python3.8 && \
     make && \
@@ -59,4 +45,4 @@ RUN cd /usr/local/Python-3.9.6 && \
     make altinstall
 
 # Install essential module
-RUN pip3 install pipenv
+RUN pip3 install poetry

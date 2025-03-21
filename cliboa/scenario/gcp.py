@@ -1,5 +1,5 @@
 #
-# Copyright 2020 BrainPad Inc. All Rights Reserved.
+# Copyright BrainPad Inc. All Rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -11,9 +11,6 @@
 # The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
 #
-from google.cloud import bigquery, firestore, storage
-from google.oauth2 import service_account
-
 from cliboa.scenario.base import BaseStep
 from cliboa.scenario.validator import EssentialParameters
 
@@ -38,45 +35,20 @@ class BaseGcp(BaseStep):
         valid = EssentialParameters(self.__class__.__name__, [self._project_id])
         valid()
 
-    def _auth(self):
-        """
-        @deprecated
-        use ServiceAccount.auth() in util.gcp
-        """
-        if self._credentials:
-            return service_account.Credentials.from_service_account_file(
-                self._credentials
+    def get_credentials(self):
+        if isinstance(self._credentials, str):
+            self._logger.warning(
+                (
+                    "DeprecationWarning: "
+                    "In the near future, "
+                    "the `key` will be changed to accept only dictionary types. "
+                    "Please see more information "
+                    "https://github.com/BrainPad/cliboa/blob/master/docs/modules/sftp_download.md"
+                )
             )
-
-    def _bigquery_client(self):
-        """
-        @deprecated
-        use BigQuery.get_bigquery_client() in util.gcp
-        """
-        if self._credentials:
-            return bigquery.Client.from_service_account_json(self._credentials)
+            return self._credentials
         else:
-            return bigquery.Client()
-
-    def _gcs_client(self):
-        """
-        @deprecated
-        use Gcs.get_gcs_client() in util.gcp
-        """
-        if self._credentials:
-            return storage.Client.from_service_account_json(self._credentials)
-        else:
-            return storage.Client()
-
-    def _firestore_client(self):
-        """
-        @deprecated
-        use Firestore.get_firestore_client() in util.gcp
-        """
-        if self._credentials:
-            return firestore.Client.from_service_account_json(self._credentials)
-        else:
-            return firestore.Client()
+            return self._source_path_reader(self._credentials)
 
 
 class BaseBigQuery(BaseGcp):
@@ -103,9 +75,7 @@ class BaseBigQuery(BaseGcp):
 
     def execute(self, *args):
         super().execute()
-        valid = EssentialParameters(
-            self.__class__.__name__, [self._location, self._dataset]
-        )
+        valid = EssentialParameters(self.__class__.__name__, [self._location, self._dataset])
         valid()
 
 
