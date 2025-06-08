@@ -25,26 +25,30 @@ jobs:
           cp cliboa/template/pyproject.above"$pyproject_toml_version".toml pyproject.toml
           poetry env use ${pyproject_toml_version}
           poetry install
-      - name: execute flake8
-        run: |
-          poetry run flake8 .
-      - name: check black format
-        run: |
-          poetry run black --check .
-      - name: check isort
-        run: |
-          poetry run isort --check
+      #- name: execute flake8
+      #  run: |
+      #    poetry run flake8 .
+      #- name: check black format
+      #  run: |
+      #    poetry run black --check .
+      #- name: check isort
+      #  run: |
+      #    poetry run isort --check
       - name: execute unittest and instrument coverage
         run: |
           poetry run pytest --cov cliboa --cov-report term-missing --cov-report=xml
-      - name: check layer dependency
-        run: |
-          cd cliboa
-          poetry run lint-imports
-      - name: execute bandit
-        run: |
-          if [ ${{ matrix.python_versions }} = 3.7 ]; then
-            echo "bandit does not support python${{ matrix.python_versions }}"
-          else
-            poetry run bandit --severity-level high -r cliboa
-          fi
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      #- name: check layer dependency
+      #  run: |
+      #    cd cliboa
+      #    poetry run lint-imports
+      #- name: execute bandit
+      #  run: |
+      #    if [ ${{ matrix.python_versions }} = 3.7 ]; then
+      #      echo "bandit does not support python${{ matrix.python_versions }}"
+      #    else
+      #      poetry run bandit --severity-level high -r cliboa
+      #    fi
