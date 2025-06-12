@@ -111,10 +111,10 @@ class RdbmsSupport:
         raise CliboaException("Must be implemented")
 
     def update(self, sql, params=None):
-        raise Exception("Must be implemented in a sub class")
+        raise CliboaException("Must be implemented in a sub class")
 
     def delete(self, sql, params=None):
-        raise Exception("Must be implemented in a sub class")
+        raise CliboaException("Must be implemented in a sub class")
 
     @abstractmethod
     def get_connection(self, **kwargs):
