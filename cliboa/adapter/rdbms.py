@@ -1,6 +1,6 @@
 from abc import abstractmethod
 
-from cliboa.util.exception import DatabaseException
+from cliboa.util.exception import CliboaException, DatabaseException
 from cliboa.util.lisboa_log import LisboaLog
 
 
@@ -108,7 +108,7 @@ class RdbmsSupport:
         return cursor
 
     def insert(self, sql, params=None):
-        raise Exception("Must be implemented in a sub class")
+        raise CliboaException("Must be implemented")
 
     def update(self, sql, params=None):
         raise Exception("Must be implemented in a sub class")

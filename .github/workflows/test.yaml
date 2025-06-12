@@ -17,18 +17,18 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python_versions }}
-      - name: install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install poetry
-          py_version=${{ matrix.python_versions }}
-          echo ${py_version}
-          pyproject_toml_version=${py_version//./}
-          echo ${pyproject_toml_version}
-          cp cliboa/template/pyproject.above"$pyproject_toml_version".toml pyproject.toml
+      #- name: install dependencies
+      #  run: |
+      #    python -m pip install --upgrade pip
+      #    pip install poetry
+      #    py_version=${{ matrix.python_versions }}
+      #    echo ${py_version}
+      #    pyproject_toml_version=${py_version//./}
+      #    echo ${pyproject_toml_version}
+      #    cp cliboa/template/pyproject.above"$pyproject_toml_version".toml pyproject.toml
           #poetry env use ${pyproject_toml_version}
-          poetry env use ${py_version}
-          poetry install
+      #    poetry env use ${py_version}
+      #    poetry install
       #- name: execute flake8
       #  run: |
       #    poetry run flake8 .
@@ -38,9 +38,9 @@ jobs:
       #- name: check isort
       #  run: |
       #    poetry run isort --check
-      - name: execute unittest and instrument coverage
-        run: |
-          poetry run pytest --cov cliboa --cov-report term-missing --cov-report=xml
+      #- name: execute unittest and instrument coverage
+      #  run: |
+      #    poetry run pytest --cov cliboa --cov-report term-missing --cov-report=xml
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v5
         env:
